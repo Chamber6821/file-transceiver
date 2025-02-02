@@ -1,8 +1,11 @@
+from src.common.Channel import Channel
 from src.common.TcpSocket import TcpSocket
 
 async def main():
     connection = TcpSocket('1.1.1.1', 228).connect() 
-    await connection.sendLine('command')
-    await connection.sendLine('arg1')
-    await connection.sendLine('arg2')
-    await connection.sendBytes(b'arg3')
+    channel = Channel(connection)
+    await channel.send(Download('/a/b/c', offset=0))
+    filePart = await channel.next()
+    filePart.type() # is FILE_PART
+    filePart.args()
+    filePart.body()

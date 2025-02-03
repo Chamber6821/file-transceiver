@@ -1,4 +1,4 @@
-from src.common.Connection import Connection
+from common.Connection import Connection
 from abc import ABC, abstractmethod
 
 

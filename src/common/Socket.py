@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from src.common.Connection import Connection
+from common.Connection import Connection
 from typing import Callable, Awaitable, Any
 
 class Socket(ABC):

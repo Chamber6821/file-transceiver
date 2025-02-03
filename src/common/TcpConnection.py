@@ -1,21 +1,36 @@
-from src.common.Connection import Connection
+from common.Connection import Connection
 from socket import socket
+
+
+class ConnectionClosed(Exception):
+    pass
 
 
 class TcpConnection(Connection):
     def __init__(self, connection: socket) -> None:
-        super().__init__()
-        self.socket = socket
+        self.connection = connection
 
     async def receiveLine(self) -> str:
-        return await super().receiveLine()
+        data = bytes()
+        while len(data) == 0 or data[-1] != b'\n'[0]:
+            part = self.connection.recv(1)
+            if len(part) == 0:
+                raise ConnectionClosed
+            data += part
+        return data.decode()
 
-    async def receiveBytes(self, length) -> bytes:
-        return await super().receiveBytes(length)
+    async def receiveBytes(self, length: int) -> bytes:
+        data = bytes()
+        while len(data) < length:
+            part = self.connection.recv(length - len(data))
+            if len(part) == 0:
+                raise ConnectionClosed
+            data += part
+        return data
 
-    async def sendLine(self, str):
-        return await super().sendLine(str)
+    async def sendLine(self, str: str):
+        self.connection.send(f'{str.strip()}\n'.encode())
 
     async def sendBytes(self, bytes):
-        return await super().sendBytes(bytes)
+        self.connection.send(bytes)
 

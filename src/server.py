@@ -1,11 +1,12 @@
+from typing import Union
 from common.Channel import Channel, Message
 from common.Router import Router
 from common.TcpConnection import ConnectionClosed
 from common.TcpSocket import TcpSocket
 from common.Connection import Connection
-import time
+import time, os
 
-from common.messages import EchoMessage, MessageType, TimeResponseMessage
+from common.messages import EchoMessage, MessageType, TimeResponseMessage, UploadMessage
 
 
 router = Router()
@@ -26,6 +27,39 @@ async def onTime(_):
     return TimeResponseMessage(timestamp=time.time())
 
 
+@router.on(MessageType.DOWNLOAD_PART)
+async def onDownload(message: Message):
+    rawFilename, rawOffset, rawLength = message.args()
+    filename, offset, length = realFilename(rawFilename), int(rawOffset), int(rawLength)
+    if not filename:
+        return EchoMessage(text='Invalid filename')
+    with open(filename, 'rb') as f:
+        f.seek(offset)
+        data = f.read(length if length > 0 else -1)
+        return UploadMessage(
+            filename=rawFilename,
+            offset=offset,
+            totalLength=os.path.getsize(filename),
+            data=data
+        )
+
+
+@router.on(MessageType.UPLOAD_PART)
+async def onUpload(message: Message):
+    rawFilename, rawOffset, rawTotalLength = message.args()
+    filename, offset, totalLength = realFilename(rawFilename), int(rawOffset), int(rawTotalLength)
+    data = message.body()
+    if not filename:
+        return EchoMessage(text='Invalid filename')
+    with open(filename, 'a'):
+        pass
+    with open(filename, 'rb+') as f:
+        f.truncate(offset + len(data))
+        f.seek(offset)
+        f.write(data)
+        return EchoMessage(text=f'Success to upload {len(data)} bytes')
+
+
 @router.otherwise
 async def unknown(message: Message):
     return EchoMessage(text=f'Unknown command: {message.type().value} {message.args()} {message.body()}')
@@ -37,6 +71,13 @@ async def handle(connection: Connection):
         response = await router.route(await channel.next())
         if response:
             await channel.send(response)
+
+
+def realFilename(rawFilename: str) -> Union[str, None]:
+    normFilename = os.path.normpath(rawFilename.strip())
+    if normFilename.startswith('../') or normFilename == '..':
+        return None
+    return f'kitchen-midden/{normFilename}'
 
 
 def main():

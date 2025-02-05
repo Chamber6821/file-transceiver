@@ -7,6 +7,8 @@ class MessageType(Enum):
     ECHO = 'ECHO'
     GET_TIME = 'GET_TIME'
     RETURN_TIME = 'RETURN_TIME'
+    DOWNLOAD_PART = 'DOWNLOAD_PART'
+    UPLOAD_PART = 'UPLOAD_PART'
 
 
 class Message(ABC):
@@ -58,3 +60,12 @@ class TimeResponseMessage(InMemoryMessage):
     def __init__(self, *, timestamp: float) -> None:
         super().__init__(MessageType.RETURN_TIME, [], str(timestamp).encode())
 
+
+class DownloadMessage(InMemoryMessage):
+    def __init__(self, *, filename: str, offset: int = 0, length = 0) -> None:
+        super().__init__(MessageType.DOWNLOAD_PART, [filename, str(offset), str(length)], b'')
+
+
+class UploadMessage(InMemoryMessage):
+    def __init__(self, filename: str, offset: int, totalLength: int, data: bytes) -> None:
+        super().__init__(MessageType.UPLOAD_PART, [filename, str(offset), str(totalLength)], data)

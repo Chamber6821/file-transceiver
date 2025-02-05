@@ -43,4 +43,5 @@ def main():
     TcpSocket('0.0.0.0', 8080).listen(handle)
 
 
-main()
+if __name__ == "__main__":
+    main()

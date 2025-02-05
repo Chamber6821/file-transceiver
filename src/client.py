@@ -50,7 +50,8 @@ async def main():
             raise Exception('Unexpected message after routing')
 
 
-try:
-    asyncio.new_event_loop().run_until_complete(main())
-except ConnectionClosed:
-    print('Connection closed')
+if __name__ == "__main__":
+    try:
+        asyncio.new_event_loop().run_until_complete(main())
+    except ConnectionClosed:
+        print('Connection closed')

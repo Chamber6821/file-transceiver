@@ -29,10 +29,13 @@ async def onTime(_):
 
 @router.on(MessageType.DOWNLOAD_PART)
 async def onDownload(message: Message):
+    print('download')
     rawFilename, rawOffset, rawLength = message.args()
     filename, offset, length = realFilename(rawFilename), int(rawOffset), int(rawLength)
     if not filename:
         return EchoMessage(text='Invalid filename')
+    if not os.path.exists(filename):
+        return EchoMessage(text=f'Not found {filename}')
     with open(filename, 'rb') as f:
         f.seek(offset)
         data = f.read(length if length > 0 else -1)

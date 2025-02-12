@@ -15,7 +15,7 @@ def completer(text, state):
     options = [cmd for cmd in commands if cmd.startswith(text.upper())]
     return options[state] if state < len(options) else None
 
-readline.parse_and_bind("tab: complete")
+readline.parse_and_bind('tab: complete')
 readline.set_completer(completer)
 
 
@@ -24,7 +24,7 @@ async def download(channel: Channel, filename: str, offset: int, totalLength: in
         pass
     try:
         with Progress() as progress:
-            downloadTask = progress.add_task("[blue]Downloading...", total=totalLength)
+            downloadTask = progress.add_task('[blue]Downloading...', total=totalLength)
             while totalLength - offset > 0:
                 await channel.send(DownloadMessage(filename=filename, offset=offset, length=min(part, totalLength - offset)))
                 message = await channel.next()
@@ -44,7 +44,7 @@ async def upload(channel: Channel, filename: str, offset: int, part: int):
         with open(filename, 'rb') as f:
             length = os.path.getsize(filename)
             with Progress() as progress:
-                uploadTask = progress.add_task("[green]Uploading...", total=length)
+                uploadTask = progress.add_task('[green]Uploading...', total=length)
                 while length - offset > 0:
                     data = f.read(min(part, length - offset))
                     await channel.send(UploadMessage(
@@ -156,7 +156,7 @@ async def main():
         await handleCommand(channel, command.upper(), args)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     try:
         asyncio.new_event_loop().run_until_complete(main())
     except ConnectionClosed:

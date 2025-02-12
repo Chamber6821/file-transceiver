@@ -3,55 +3,165 @@ from common.Router import Router
 from common.TcpConnection import ConnectionClosed
 from common.TcpSocket import TcpSocket
 import asyncio
+import time, os
+import readline
+from rich.progress import Progress
 
-from common.messages import CloseMessage, EchoMessage, MessageType, TimeRequestMessage
+from common.messages import CloseMessage, EchoMessage, MessageType, TimeRequestMessage, DownloadMessage, UploadMessage
+
+commands = ['HELP', 'CLOSE', 'TIME', 'ECHO', 'DOWNLOAD', 'UPLOAD']
+
+def completer(text, state):
+    options = [cmd for cmd in commands if cmd.startswith(text.upper())]
+    return options[state] if state < len(options) else None
+
+readline.parse_and_bind('tab: complete')
+readline.set_completer(completer)
 
 
-router = Router()
+async def download(channel: Channel, filename: str, offset: int, totalLength: int, part: int):
+    with open(filename, 'a'):
+        pass
+    try:
+        with Progress() as progress:
+            downloadTask = progress.add_task('[blue]Downloading...', total=totalLength)
+            while totalLength - offset > 0:
+                await channel.send(DownloadMessage(filename=filename, offset=offset, length=min(part, totalLength - offset)))
+                message = await channel.next()
+                data = message.body()
+                with open(filename, 'rb+') as f:
+                    f.truncate(offset + len(data))
+                    f.seek(offset)
+                    f.write(data)
+                offset += len(data)
+                progress.update(downloadTask, completed=offset)
+    except KeyboardInterrupt:
+        print('Downloading interrapted')
 
 
-@router.on(MessageType.ECHO)
-async def onEcho(message: Message):
-    print('Message:', message.body().decode())
+async def upload(channel: Channel, filename: str, offset: int, part: int):
+    try:
+        with open(filename, 'rb') as f:
+            length = os.path.getsize(filename)
+            with Progress() as progress:
+                uploadTask = progress.add_task('[green]Uploading...', total=length)
+                while length - offset > 0:
+                    data = f.read(min(part, length - offset))
+                    await channel.send(UploadMessage(
+                        filename=filename,
+                        offset=offset,
+                        totalLength=length,
+                        data=data
+                    ))
+                    offset += len(data)
+                    await channel.next()
+                    progress.update(uploadTask, completed=offset)
+    except KeyboardInterrupt:
+        print('Uploading interrapted')
 
 
-@router.on(MessageType.RETURN_TIME)
-async def onTime(message: Message):
-    print('Time:', float(message.body().decode()))
+async def handleCommand(channel: Channel, command: str, args: list[str]):
+    def onHelp():
+        print('''
+        CLOSE -- closes the connection
+        TIME -- returns the current server time
+        ECHO -- returns the data transmitted by the client after the command
+        DOWNLOAD -- download file
+        UPLOAD -- upload file
+        ''')
 
 
-@router.otherwise
-async def unknown(message: Message):
-    print('Unknown message:', message.type(), message.args(), message.body())
+    async def onClose(channel: Channel):
+        await channel.send(CloseMessage())
+        await channel.next()
+
+
+    async def onTime(channel: Channel):
+        await channel.send(TimeRequestMessage())
+        message = await channel.next()
+        print(time.asctime(time.localtime(float(message.body().decode()))))
+
+
+    async def onEcho(channel: Channel):
+        await channel.send(EchoMessage(text=' '.join(args))) 
+        message = await channel.next()
+        print(message.body().decode()) 
+
+
+    async def onDownload(channel: Channel):    
+        if len(args) < 1:
+            print('Invalid filename')
+            return
+        filename = args[0]
+        part = int(args[1]) if len(args) >= 2 else 64 * 1024
+        if os.path.exists(filename):
+            match input('''
+            Such a file already exists
+            Continue/Rewrite/Abort? [C/R/A, default A] ''').upper():
+                case 'C': offset = os.path.getsize(filename)
+                case 'R': offset = 0
+                case 'A': return
+                case _: return
+        await channel.send(DownloadMessage(filename=filename, offset=offset, length=1))
+        message = await channel.next()
+        if message.type() == MessageType.ECHO:
+            print(message.body().decode()) 
+            return
+        rawFilename, rawOffset, rawTotalLength = message.args()
+        start_time = time.time()
+        await download(
+            channel=channel,
+            filename=rawFilename[:-1],
+            offset=int(rawOffset),
+            totalLength=int(rawTotalLength),
+            part=part
+        )
+        end_time = time.time()
+        print(f'{int((os.path.getsize(filename) - offset)/(end_time - start_time)):_} B/s')
+
+
+    async def onUpload(channel: Channel):
+        if len(args) < 1:
+            print('Invalid filename')
+            return
+        filename = args[0]
+        part = int(args[1]) if len(args) >= 2 else 64 * 1024
+        if not os.path.exists(filename):
+            print(f'Not found {filename}')
+            return
+        start_time = time.time()
+        await upload(channel=channel, filename=filename, offset=0, part=part)
+        end_time = time.time()
+        print(f'{int(os.path.getsize(filename)/(end_time - start_time)):_} B/s')
+        
+              
+    match command:
+        case 'HELP': onHelp()
+        case 'CLOSE': await onClose(channel)
+        case 'TIME': await onTime(channel)
+        case 'ECHO': await onEcho(channel)
+        case 'DOWNLOAD': await onDownload(channel)
+        case 'UPLOAD': await onUpload(channel)
+        case _: print('Unknown choice')  
 
 
 async def main():
-    connection = TcpSocket('127.0.0.1', 8080).connect() 
+    connection = TcpSocket('172.17.124.213', 8080).connect() 
     channel = Channel(connection)
     while True:
-        print('''
-        0 - EXIT
-        1 - TIME
-        2 - ECHO
-        ''')
-        choice = int(input())
-        match choice:
-            case 0:
-                await channel.send(CloseMessage())
-            case 1:
-                await channel.send(TimeRequestMessage())
-            case 2:
-                await channel.send(EchoMessage(text=input('Text: ')))
-            case _:
-                print('Unknown choice')
-                continue
-        response = await router.route(await channel.next())
-        if response:
-            raise Exception('Unexpected message after routing')
+        rawCommand = input('~> ')
+        if rawCommand == '':
+            continue
+        command, *args = rawCommand.split()
+        await handleCommand(channel, command.upper(), args)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     try:
         asyncio.new_event_loop().run_until_complete(main())
     except ConnectionClosed:
         print('Connection closed')
+    except BrokenPipeError:
+        print('Server DOWN')   
+    except ConnectionRefusedError:
+        print('Serer unavalible')    

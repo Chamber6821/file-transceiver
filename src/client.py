@@ -19,39 +19,45 @@ readline.parse_and_bind("tab: complete")
 readline.set_completer(completer)
 
 
-async def download(channel: Channel, filename: str, offset: int, totalLength: int):
+async def download(channel: Channel, filename: str, offset: int, totalLength: int, part: int):
     with open(filename, 'a'):
         pass
-    with Progress() as progress:
-        downloadTask = progress.add_task("[blue]Downloading...", total=totalLength)
-        while totalLength - offset > 0:
-            await channel.send(DownloadMessage(filename=filename, offset=offset, length=min(1024, totalLength - offset)))
-            message = await channel.next()
-            data = message.body()
-            with open(filename, 'rb+') as f:
-                f.truncate(offset + len(data))
-                f.seek(offset)
-                f.write(data) 
-            offset += len(data)
-            progress.update(downloadTask, completed=offset)
-
-
-async def upload(channel: Channel, filename: str, offset: int = 0):
-    with open(filename, 'rb') as f:
-        length = os.path.getsize(filename)
+    try:
         with Progress() as progress:
-            uploadTask = progress.add_task("[green]Uploading...", total=length)    
-            while length - offset > 0:
-                data = f.read(min(1024, length - offset))
-                await channel.send(UploadMessage(
-                    filename=filename,
-                    offset=offset,
-                    totalLength=length,
-                    data=data
-                ))
-                offset += len(data) 
-                await channel.next()
-                progress.update(uploadTask, completed=offset)
+            downloadTask = progress.add_task("[blue]Downloading...", total=totalLength)
+            while totalLength - offset > 0:
+                await channel.send(DownloadMessage(filename=filename, offset=offset, length=min(part, totalLength - offset)))
+                message = await channel.next()
+                data = message.body()
+                with open(filename, 'rb+') as f:
+                    f.truncate(offset + len(data))
+                    f.seek(offset)
+                    f.write(data)
+                offset += len(data)
+                progress.update(downloadTask, completed=offset)
+    except KeyboardInterrupt:
+        print('Downloading interrapted')
+
+
+async def upload(channel: Channel, filename: str, offset: int, part: int):
+    try:
+        with open(filename, 'rb') as f:
+            length = os.path.getsize(filename)
+            with Progress() as progress:
+                uploadTask = progress.add_task("[green]Uploading...", total=length)
+                while length - offset > 0:
+                    data = f.read(min(part, length - offset))
+                    await channel.send(UploadMessage(
+                        filename=filename,
+                        offset=offset,
+                        totalLength=length,
+                        data=data
+                    ))
+                    offset += len(data)
+                    await channel.next()
+                    progress.update(uploadTask, completed=offset)
+    except KeyboardInterrupt:
+        print('Uploading interrapted')
 
 
 async def handleCommand(channel: Channel, command: str, args: list[str]):
@@ -87,23 +93,31 @@ async def handleCommand(channel: Channel, command: str, args: list[str]):
             print('Invalid filename')
             return
         filename = args[0]
-        if not os.path.exists(filename):
-            await channel.send(DownloadMessage(filename=filename, length=1))
-        elif input('''
+        part = int(args[1]) if len(args) >= 2 else 64 * 1024
+        if os.path.exists(filename):
+            match input('''
             Such a file already exists
-            Continue downloading(y/n)?
-            ''').upper() == 'Y': 
-            await channel.send(DownloadMessage(filename=filename, offset=os.path.getsize(filename), length=1))
-        else: return    
+            Continue/Rewrite/Abort? [C/R/A, default A] ''').upper():
+                case 'C': offset = os.path.getsize(filename)
+                case 'R': offset = 0
+                case 'A': return
+                case _: return
+        await channel.send(DownloadMessage(filename=filename, offset=offset, length=1))
         message = await channel.next()
         if message.type() == MessageType.ECHO:
             print(message.body().decode()) 
             return
         rawFilename, rawOffset, rawTotalLength = message.args()
         start_time = time.time()
-        await download(channel=channel, filename=rawFilename[:-1], offset=int(rawOffset), totalLength=int(rawTotalLength))
+        await download(
+            channel=channel,
+            filename=rawFilename[:-1],
+            offset=int(rawOffset),
+            totalLength=int(rawTotalLength),
+            part=part
+        )
         end_time = time.time()
-        print(int(os.path.getsize(filename)/(end_time-start_time)), 'B/s')
+        print(f'{int((os.path.getsize(filename) - offset)/(end_time - start_time)):_} B/s')
 
 
     async def onUpload(channel: Channel):
@@ -111,13 +125,14 @@ async def handleCommand(channel: Channel, command: str, args: list[str]):
             print('Invalid filename')
             return
         filename = args[0]
+        part = int(args[1]) if len(args) >= 2 else 64 * 1024
         if not os.path.exists(filename):
             print(f'Not found {filename}')
             return
         start_time = time.time()
-        await upload(channel=channel, filename=filename)
+        await upload(channel=channel, filename=filename, offset=0, part=part)
         end_time = time.time()
-        print(int(os.path.getsize(filename)/(end_time-start_time)), 'B/s')
+        print(f'{int(os.path.getsize(filename)/(end_time - start_time)):_} B/s')
         
               
     match command:

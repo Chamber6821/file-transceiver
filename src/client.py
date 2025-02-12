@@ -5,6 +5,7 @@ from common.TcpSocket import TcpSocket
 import asyncio
 import time, os
 import readline
+from rich.progress import Progress
 
 from common.messages import CloseMessage, EchoMessage, MessageType, TimeRequestMessage, DownloadMessage, UploadMessage
 
@@ -18,54 +19,39 @@ readline.parse_and_bind("tab: complete")
 readline.set_completer(completer)
 
 
-router = Router()
+async def download(channel: Channel, filename: str, offset: int, totalLength: int):
+    with open(filename, 'a'):
+        pass
+    with Progress() as progress:
+        downloadTask = progress.add_task("[blue]Downloading...", total=totalLength)
+        while totalLength - offset > 0:
+            await channel.send(DownloadMessage(filename=filename, offset=offset, length=min(1024, totalLength - offset)))
+            message = await channel.next()
+            data = message.body()
+            with open(filename, 'rb+') as f:
+                f.truncate(offset + len(data))
+                f.seek(offset)
+                f.write(data) 
+            offset += len(data)
+            progress.update(downloadTask, completed=offset)
 
 
-# @router.on(MessageType.ECHO)
-# async def onEcho(message: Message):
-#     print(message.body().decode())
-
-
-# @router.on(MessageType.RETURN_TIME)
-# async def onTime(message: Message):
-#     print(time.asctime(time.localtime(float(message.body().decode()))))
-
-
-# @router.on(MessageType.DOWNLOAD_PART)
-# async def onDownload(message: Message):
-#     rawFilename, rawOffset, rawLength = message.args()
-#     filename, offset, length = rawFilename, int(rawOffset), int(rawLength)
-#     if not filename:
-#         return EchoMessage(text='Invalid filename')
-#     if not os.path.exists(filename):
-#         return EchoMessage(text=f'Not found {filename}')
-#     with open(filename, 'rb') as f:
-#         f.seek(offset)
-#         data = f.read(length if length > 0 else -1)
-#         return UploadMessage(
-#             filename=rawFilename,
-#             offset=offset,
-#             totalLength=os.path.getsize(filename),
-#             data=data
-#         )
-
-
-# @router.on(MessageType.UPLOAD_PART)
-# async def onUpload(message: Message):
-#     rawFilename, rawOffset, rawTotalLength = message.args()
-#     filename, offset, totalLength = rawFilename[:-1], int(rawOffset), int(rawTotalLength)
-#     data = message.body()
-#     with open(filename, 'a'):
-#         pass
-#     with open(filename, 'rb+') as f:
-#         f.truncate(offset + len(data))
-#         f.seek(offset)
-#         f.write(data)
-        
-
-# @router.otherwise
-# async def unknown(message: Message):
-#     print('Unknown message:', message.type(), message.args(), message.body())
+async def upload(channel: Channel, filename: str, offset: int = 0):
+    with open(filename, 'rb') as f:
+        length = os.path.getsize(filename)
+        with Progress() as progress:
+            uploadTask = progress.add_task("[green]Uploading...", total=length)    
+            while length - offset > 0:
+                data = f.read(min(1024, length - offset))
+                await channel.send(UploadMessage(
+                    filename=filename,
+                    offset=offset,
+                    totalLength=length,
+                    data=data
+                ))
+                offset += len(data) 
+                await channel.next()
+                progress.update(uploadTask, completed=offset)
 
 
 async def handleCommand(channel: Channel, command: str, args: list[str]):
@@ -82,6 +68,7 @@ async def handleCommand(channel: Channel, command: str, args: list[str]):
     async def onClose(channel: Channel):
         await channel.send(CloseMessage())
         await channel.next()
+
 
     async def onTime(channel: Channel):
         await channel.send(TimeRequestMessage())
@@ -101,23 +88,22 @@ async def handleCommand(channel: Channel, command: str, args: list[str]):
             return
         filename = args[0]
         if not os.path.exists(filename):
-            await channel.send(DownloadMessage(filename=filename))
-            print('full')
-        else:    
-            await channel.send(DownloadMessage(filename=filename, offset=os.path.getsize(filename))) 
+            await channel.send(DownloadMessage(filename=filename, length=1))
+        elif input('''
+            Such a file already exists
+            Continue downloading(y/n)?
+            ''').upper() == 'Y': 
+            await channel.send(DownloadMessage(filename=filename, offset=os.path.getsize(filename), length=1))
+        else: return    
         message = await channel.next()
         if message.type() == MessageType.ECHO:
             print(message.body().decode()) 
             return
         rawFilename, rawOffset, rawTotalLength = message.args()
-        filename, offset, totalLength = rawFilename[:-1], int(rawOffset), int(rawTotalLength)
-        data = message.body()
-        with open(filename, 'a'):
-            pass
-        with open(filename, 'rb+') as f:
-            f.truncate(offset + len(data))
-            f.seek(offset)
-            f.write(data)    
+        start_time = time.time()
+        await download(channel=channel, filename=rawFilename[:-1], offset=int(rawOffset), totalLength=int(rawTotalLength))
+        end_time = time.time()
+        print(int(os.path.getsize(filename)/(end_time-start_time)), 'B/s')
 
 
     async def onUpload(channel: Channel):
@@ -128,19 +114,12 @@ async def handleCommand(channel: Channel, command: str, args: list[str]):
         if not os.path.exists(filename):
             print(f'Not found {filename}')
             return
-        with open(filename, 'rb') as f:
-            length = os.path.getsize(filename)
-            await channel.send(UploadMessage(
-                filename=filename,
-                offset=0,
-                totalLength=length,
-                data=f.read()
-            ))
-        message = await channel.next()
-        print(message.body().decode()) 
+        start_time = time.time()
+        await upload(channel=channel, filename=filename)
+        end_time = time.time()
+        print(int(os.path.getsize(filename)/(end_time-start_time)), 'B/s')
+        
               
-
-
     match command:
         case 'HELP': onHelp()
         case 'CLOSE': await onClose(channel)
@@ -152,7 +131,7 @@ async def handleCommand(channel: Channel, command: str, args: list[str]):
 
 
 async def main():
-    connection = TcpSocket('127.0.0.1', 8080).connect() 
+    connection = TcpSocket('172.17.124.213', 8080).connect() 
     channel = Channel(connection)
     while True:
         rawCommand = input('~> ')
@@ -167,3 +146,7 @@ if __name__ == "__main__":
         asyncio.new_event_loop().run_until_complete(main())
     except ConnectionClosed:
         print('Connection closed')
+    except BrokenPipeError:
+        print('Server DOWN')   
+    except ConnectionRefusedError:
+        print('Serer unavalible')    

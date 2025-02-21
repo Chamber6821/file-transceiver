@@ -94,6 +94,7 @@ async def handleCommand(channel: Channel, command: str, args: list[str]):
             return
         filename = args[0]
         part = int(args[1]) if len(args) >= 2 else 64 * 1024
+        offset = 0
         if os.path.exists(filename):
             match input('''
             Such a file already exists

@@ -2,6 +2,7 @@ from common.Channel import Channel, Message
 from common.Router import Router
 from common.TcpConnection import ConnectionClosed
 from common.TcpSocket import TcpSocket
+import argparse
 import asyncio
 import time, os
 import readline
@@ -36,7 +37,7 @@ async def download(channel: Channel, filename: str, offset: int, totalLength: in
                 offset += len(data)
                 progress.update(downloadTask, completed=offset)
     except KeyboardInterrupt:
-        print('Downloading interrapted')
+        print('Downloading interrupted')
 
 
 async def upload(channel: Channel, filename: str, offset: int, part: int):
@@ -57,17 +58,19 @@ async def upload(channel: Channel, filename: str, offset: int, part: int):
                     await channel.next()
                     progress.update(uploadTask, completed=offset)
     except KeyboardInterrupt:
-        print('Uploading interrapted')
+        print('Uploading interrupted')
 
 
 async def handleCommand(channel: Channel, command: str, args: list[str]):
     def onHelp():
         print('''
-        CLOSE -- closes the connection
-        TIME -- returns the current server time
-        ECHO -- returns the data transmitted by the client after the command
-        DOWNLOAD -- download file
-        UPLOAD -- upload file
+        Available commands:
+          CLOSE     - Close the connection
+          TIME      - Get the current server time
+          ECHO      - Send a message and receive it back
+          DOWNLOAD  - Download a file from the server
+          UPLOAD    - Upload a file to the server
+          HELP      - Show this help message
         ''')
 
 
@@ -97,10 +100,10 @@ async def handleCommand(channel: Channel, command: str, args: list[str]):
         offset = 0
         if os.path.exists(filename):
             match input('''
-            Such a file already exists
-            Continue/Rewrite/Abort? [C/R/A, default A] ''').upper():
+            A file with this name already exists
+            Continue/Overwrite/Abort? [C/O/A, default A] ''').upper():
                 case 'C': offset = os.path.getsize(filename)
-                case 'R': offset = 0
+                case 'O': offset = 0
                 case 'A': return
                 case _: return
         await channel.send(DownloadMessage(filename=filename, offset=offset, length=1))
@@ -123,12 +126,12 @@ async def handleCommand(channel: Channel, command: str, args: list[str]):
 
     async def onUpload(channel: Channel):
         if len(args) < 1:
-            print('Invalid filename')
+            print('Invalid file name')
             return
         filename = args[0]
         part = int(args[1]) if len(args) >= 2 else 64 * 1024
         if not os.path.exists(filename):
-            print(f'Not found {filename}')
+            print(f'{filename} not found')
             return
         start_time = time.time()
         await upload(channel=channel, filename=filename, offset=0, part=part)
@@ -143,12 +146,24 @@ async def handleCommand(channel: Channel, command: str, args: list[str]):
         case 'ECHO': await onEcho(channel)
         case 'DOWNLOAD': await onDownload(channel)
         case 'UPLOAD': await onUpload(channel)
-        case _: print('Unknown choice')  
+        case _: print('Unknown command')
 
 
 async def main():
-    connection = TcpSocket('172.17.124.213', 8080).connect() 
+
+    parser = argparse.ArgumentParser(description="TCP Client")
+    parser.add_argument("ip", help="Server IP address")
+    parser.add_argument("port", type=int, help="Server port")
+    args = parser.parse_args()
+
+    try:
+        connection = TcpSocket(args.ip, args.port).connect()
+    except Exception as e:
+        print(f"Failed to connect to {args.ip}:{args.port} - {e}")
+        return
+
     channel = Channel(connection)
+
     while True:
         rawCommand = input('~> ')
         if rawCommand == '':
@@ -165,4 +180,4 @@ if __name__ == '__main__':
     except BrokenPipeError:
         print('Server DOWN')   
     except ConnectionRefusedError:
-        print('Serer unavalible')    
+        print('Server unavailable')

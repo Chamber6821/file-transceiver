@@ -126,7 +126,7 @@ async def handleCommand(channel: Channel, command: str, args: list[str]):
 
     async def onUpload(channel: Channel):
         if len(args) < 1:
-            print('Invalid file name')
+            print('Invalid filename')
             return
         filename = args[0]
         part = int(args[1]) if len(args) >= 2 else 64 * 1024
@@ -155,13 +155,11 @@ async def main():
     parser.add_argument("ip", help="Server IP address")
     parser.add_argument("port", type=int, help="Server port")
     args = parser.parse_args()
-
     try:
         connection = TcpSocket(args.ip, args.port).connect()
     except Exception as e:
-        print(f"Failed to connect to {args.ip}:{args.port} - {e}")
-        return
-
+        print(f"Failed to connect to {args.ip}:{args.port}")
+        raise e
     channel = Channel(connection)
 
     while True:

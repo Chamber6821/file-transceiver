@@ -36,7 +36,7 @@ async def download(channel: Channel, filename: str, offset: int, totalLength: in
                 offset += len(data)
                 progress.update(downloadTask, completed=offset)
     except KeyboardInterrupt:
-        print('Downloading interrapted')
+        print('Downloading interrupted')
 
 
 async def upload(channel: Channel, filename: str, offset: int, part: int):
@@ -57,7 +57,7 @@ async def upload(channel: Channel, filename: str, offset: int, part: int):
                     await channel.next()
                     progress.update(uploadTask, completed=offset)
     except KeyboardInterrupt:
-        print('Uploading interrapted')
+        print('Uploading interrupted')
 
 
 async def handleCommand(channel: Channel, command: str, args: list[str]):
@@ -94,6 +94,7 @@ async def handleCommand(channel: Channel, command: str, args: list[str]):
             return
         filename = args[0]
         part = int(args[1]) if len(args) >= 2 else 64 * 1024
+        offset = 0
         if os.path.exists(filename):
             match input('''
             Such a file already exists
@@ -108,10 +109,11 @@ async def handleCommand(channel: Channel, command: str, args: list[str]):
             print(message.body().decode()) 
             return
         rawFilename, rawOffset, rawTotalLength = message.args()
+        filename=rawFilename[:-1]
         start_time = time.time()
         await download(
             channel=channel,
-            filename=rawFilename[:-1],
+            filename=filename,
             offset=int(rawOffset),
             totalLength=int(rawTotalLength),
             part=part
@@ -157,11 +159,17 @@ async def main():
 
 
 if __name__ == '__main__':
-    try:
-        asyncio.new_event_loop().run_until_complete(main())
-    except ConnectionClosed:
-        print('Connection closed')
-    except BrokenPipeError:
-        print('Server DOWN')   
-    except ConnectionRefusedError:
-        print('Serer unavalible')    
+    while True:
+        try:
+            asyncio.new_event_loop().run_until_complete(main())
+        except ConnectionClosed:
+            print('Connection closed')
+        except BrokenPipeError:
+            print('Server DOWN')
+        except ConnectionRefusedError:
+            print('Serer unavalible')
+        except ConnectionResetError:
+            print('Serer unavalible')
+        except TimeoutError:
+            print('Server is not responding')
+        if not input('Do you want to reconnect [Y/N, default N] ').upper() == 'Y': break

@@ -131,7 +131,7 @@ async def handleCommand(channel: Channel, command: str, args: list[str]):
             part=part
         )
         end_time = time.time()
-        speed = os.path.getsize(filename) / (end_time - start_time)
+        speed = (os.path.getsize(filename) - offset) / (end_time - start_time)
         print(f"Speed: {format_size(int(speed))}/s")
 
     async def onUpload(channel: Channel):
@@ -146,7 +146,7 @@ async def handleCommand(channel: Channel, command: str, args: list[str]):
         start_time = time.time()
         await upload(channel=channel, filename=filename, offset=0, part=part)
         end_time = time.time()
-        speed = os.path.getsize(filename) / (end_time - start_time)
+        speed = os.path.getsize(filename)/ (end_time - start_time)
         print(f"Speed: {format_size(int(speed))}/s")
         
               

@@ -13,6 +13,7 @@ class TcpSocket(Socket):
     def connect(self):
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        sock.settimeout(28)
         sock.connect((self.ip, self.port))
         return TcpConnection(sock)
 
@@ -26,7 +27,7 @@ class TcpSocket(Socket):
             connection.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
             connection.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, 1)
             connection.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPINTVL, 1)
-            connection.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPCNT, 3)
+            connection.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPCNT, 30)
             conn = TcpConnection(connection)
             try:
                 print('Open connection', addr)

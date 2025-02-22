@@ -19,6 +19,16 @@ def completer(text, state):
 readline.parse_and_bind('tab: complete')
 readline.set_completer(completer)
 
+def format_size(size_in_bytes: int) -> str:
+    if size_in_bytes < 1024:
+        return f"{size_in_bytes} B"
+    elif size_in_bytes < 1024 * 1024:
+        return f"{size_in_bytes / 1024:.2f} KB"
+    elif size_in_bytes < 1024 * 1024 * 1024:
+        return f"{size_in_bytes / (1024 * 1024):.2f} MB"
+    else:
+        return f"{size_in_bytes / (1024 * 1024 * 1024):.2f} GB"
+
 
 async def download(channel: Channel, filename: str, offset: int, totalLength: int, part: int):
     with open(filename, 'a'):
@@ -121,8 +131,8 @@ async def handleCommand(channel: Channel, command: str, args: list[str]):
             part=part
         )
         end_time = time.time()
-        print(f'{int((os.path.getsize(filename) - offset)/(end_time - start_time)):_} B/s')
-
+        speed = os.path.getsize(filename) / (end_time - start_time)
+        print(f"Speed: {format_size(int(speed))}/s")
 
     async def onUpload(channel: Channel):
         if len(args) < 1:
@@ -136,7 +146,8 @@ async def handleCommand(channel: Channel, command: str, args: list[str]):
         start_time = time.time()
         await upload(channel=channel, filename=filename, offset=0, part=part)
         end_time = time.time()
-        print(f'{int(os.path.getsize(filename)/(end_time - start_time)):_} B/s')
+        speed = os.path.getsize(filename) / (end_time - start_time)
+        print(f"Speed: {format_size(int(speed))}/s")
         
               
     match command:

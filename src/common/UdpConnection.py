@@ -1,7 +1,6 @@
 import asyncio
 import socket
 import struct
-from collections import deque
 
 ACK_TIMEOUT = 0.5
 WINDOW_SIZE = 4
@@ -12,26 +11,37 @@ class UdpConnection:
     def __init__(self, sock: socket.socket, address):
         self.sock = sock
         self.address = address
-        self.window = deque()
-        self.ack_received = {}
-        self.seq_num = 0
-        self.expected_seq = 0
+        self.lock = asyncio.Lock()
+
 
     async def sendBytes(self, data: bytes):
         chunks = [data[i:i + PAYLOAD_SIZE] for i in range(0, len(data), PAYLOAD_SIZE)]
-        self.ack_received = {i: False for i in range(len(chunks))}
-        self.window = deque([(i, chunk) for i, chunk in enumerate(chunks)])
+        ack_received = {i: False for i in range(len(chunks))}
+        window = [(i, chunk) for i, chunk in enumerate(chunks)]
 
-        while self.window:
-            window_list = list(self.window)[:WINDOW_SIZE]
-            for seq, chunk in window_list:
-                if not self.ack_received[seq]:
+        async def listen_for_acks():
+            while not all(ack_received.values()):
+                data, addr = await asyncio.get_running_loop().sock_recvfrom(self.sock, HEADER_SIZE)
+                if addr != self.address:
+                    continue
+                seq, = struct.unpack('!I', data)
+                async with self.lock:
+                    if seq in ack_received:
+                        ack_received[seq] = True
+
+        listener_task = asyncio.create_task(listen_for_acks())
+
+        try:
+            while not all(ack_received.values()):
+                async with self.lock:
+                    window_list = [w for w in window if not ack_received[w[0]]][:WINDOW_SIZE]
+                for seq, chunk in window_list:
                     packet = struct.pack('!I', seq) + chunk
                     await self._send(packet)
+                await asyncio.wait_for(listener_task, timeout=ACK_TIMEOUT)
 
-            await asyncio.sleep(ACK_TIMEOUT)
-
-            self.window = deque([(seq, chunk) for seq, chunk in self.window if not self.ack_received[seq]])
+        finally:
+            listener_task.cancel()
 
     async def sendLine(self, data: str):
         await self.sendBytes(f"{data.strip()}\n".encode())
@@ -42,6 +52,8 @@ class UdpConnection:
 
     async def receiveBytes(self, length: int) -> bytes:
         received_data = {}
+        expected_seq = 0
+
         while True:
             data, addr = await asyncio.get_running_loop().sock_recvfrom(self.sock, length + HEADER_SIZE)
             if addr != self.address:
@@ -49,25 +61,21 @@ class UdpConnection:
 
             seq, = struct.unpack('!I', data[:HEADER_SIZE])
             payload = data[HEADER_SIZE:]
-            received_data[seq] = payload
 
-            ack_packet = struct.pack('!I', seq)
-            await self._send(ack_packet)
+            async with self.lock:
+                if seq not in received_data:
+                    received_data[seq] = payload
+                    ack_packet = struct.pack('!I', seq)
+                    await self._send(ack_packet)
 
-            if seq == self.expected_seq:
-                self.expected_seq += 1
+                if seq == expected_seq:
+                    expected_seq += 1
+                    while expected_seq in received_data:
+                        expected_seq += 1
 
-            if len(received_data) == len(set(received_data.keys())):
+            if len(received_data) >= (length // PAYLOAD_SIZE + 1):
                 return b"".join([received_data[i] for i in sorted(received_data.keys())])
 
     async def receiveLine(self) -> str:
         data = await self.receiveBytes(1300)
         return data.decode().strip()
-
-    async def handle_ack(self):
-        while True:
-            data, addr = await asyncio.get_running_loop().sock_recvfrom(self.sock, HEADER_SIZE)
-            if addr != self.address:
-                continue
-            seq, = struct.unpack('!I', data)
-            self.ack_received[seq] = True

@@ -18,12 +18,11 @@ class UdpSocket(Socket):
     def connect(self, target_ip, target_port):
         return UdpConnection(self.sock, (target_ip, target_port))
 
-    async def listen(self, handler):
-        loop = asyncio.get_running_loop()
+    def listen(self, handler):
         while True:
             try:
-                data, addr = await loop.sock_recvfrom(self.sock, 1024)
+                data, addr = self.sock.recvfrom(1024)
                 connection = UdpConnection(self.sock, addr)
-                asyncio.create_task(handler(connection, data, addr))
+                handler(connection, data, addr)
             except Exception:
                 print(traceback.format_exc())

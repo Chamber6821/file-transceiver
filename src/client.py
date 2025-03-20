@@ -1,13 +1,13 @@
-from common.Channel import Channel, Message
-from common.Router import Router
-from common.TcpConnection import ConnectionClosed
-from common.TcpSocket import TcpSocket
+from common.Channel import Channel
+from common.Connection import ConnectionClosed
 import argparse
 import asyncio
 import time, os
 import readline
 from rich.progress import Progress
+from aioconsole import ainput
 
+from common.UdpSocket import UdpSocket
 from common.messages import CloseMessage, EchoMessage, MessageType, TimeRequestMessage, DownloadMessage, UploadMessage
 
 commands = ['HELP', 'CLOSE', 'TIME', 'ECHO', 'DOWNLOAD', 'UPLOAD']
@@ -161,20 +161,19 @@ async def handleCommand(channel: Channel, command: str, args: list[str]):
 
 
 async def main():
-
     parser = argparse.ArgumentParser(description="TCP Client")
     parser.add_argument("ip", help="Server IP address")
     parser.add_argument("port", type=int, help="Server port")
     args = parser.parse_args()
     try:
-        connection = TcpSocket(args.ip, args.port).connect()
+        connection = UdpSocket(args.ip, args.port, 1).connect()
     except Exception as e:
         print(f"Failed to connect to {args.ip}:{args.port}")
         raise e
     channel = Channel(connection)
 
     while True:
-        rawCommand = input('~> ')
+        rawCommand = await ainput('~> ')
         if rawCommand == '':
             continue
         command, *args = rawCommand.split()

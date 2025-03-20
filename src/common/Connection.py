@@ -1,5 +1,10 @@
 from abc import ABC, abstractmethod
 
+
+class ConnectionClosed(Exception):
+    pass
+
+
 class Connection(ABC):
     @abstractmethod
     async def receiveLine(self) -> str:

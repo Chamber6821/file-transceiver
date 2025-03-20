@@ -31,7 +31,7 @@ class Packet():
 
 
 class StreamDriver:
-    def __init__(self, input: Queue[int], output: Queue[int], *, max_data_len = 1024):
+    def __init__(self, input: Queue[int], output: Queue[int], *, max_data_len = 64 * 1024):
         self.input = input
         self.output = output
         self.max_data_len = max_data_len

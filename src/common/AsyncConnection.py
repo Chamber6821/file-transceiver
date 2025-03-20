@@ -17,7 +17,6 @@ class AsyncConnection(Connection):
             except QueueEmpty:
                 raise ConnectionClosed
             data += byte
-        print('recv line', data)
         return data.decode()
 
     async def receiveBytes(self, length: int) -> bytes:
@@ -28,14 +27,12 @@ class AsyncConnection(Connection):
             except QueueEmpty:
                 raise ConnectionClosed
             data += byte
-        print('recv bytes', data)
         return data
 
     async def sendLine(self, str: str):
         await self.sendBytes(f'{str.strip()}\n'.encode())
 
     async def sendBytes(self, bytes):
-        print('send bytes', bytes)
         for byte in bytes:
             try:
                 await self.output.put(byte)

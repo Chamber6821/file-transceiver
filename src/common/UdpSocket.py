@@ -53,7 +53,6 @@ class StreamDriver:
                 break
             self.unconfirmed_output_packets.append(self.__create_packet(bytes()))
             if packet.number == self.next_input_index:
-                print('got', packet)
                 self.next_input_index += 1
                 for byte in packet.data:
                     await self.input.put(byte)
@@ -69,8 +68,6 @@ class StreamDriver:
             self.next_output_index += 1
         if len(self.unconfirmed_output_packets) == 0:
             return [self.__create_packet(bytes())]
-        for p in self.unconfirmed_output_packets:
-            print('sent', p)
         return self.unconfirmed_output_packets
 
 
@@ -166,8 +163,6 @@ class UdpSocket(Socket):
         while True:
             for address, entry in list(self.connectionMap.items()):
                 packets = await entry.driver.produce()
-                if any(map(lambda x: len(x.data) > 0, packets)):
-                    print('Send', len(packets), 'packets to', address)
                 for packet in packets:
                     await loop.sock_sendto(socket, packet.as_bytes(), address)
             await asyncio.sleep(0.1)

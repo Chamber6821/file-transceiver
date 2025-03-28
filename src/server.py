@@ -1,11 +1,11 @@
+import asyncio
 from typing import Union
 from common.Channel import Channel, Message
 from common.Router import Router
-from common.TcpConnection import ConnectionClosed
-from common.TcpSocket import TcpSocket
-from common.Connection import Connection
+from common.Connection import Connection, ConnectionClosed
 import time, os
 
+from common.UdpSocket import UdpSocket
 from common.messages import EchoMessage, MessageType, TimeResponseMessage, UploadMessage
 
 
@@ -84,7 +84,7 @@ def realFilename(rawFilename: str) -> Union[str, None]:
 
 
 def main():
-    TcpSocket('0.0.0.0', 8080).listen(handle)
+    UdpSocket('0.0.0.0', 8080, 1).listen(handle)
 
 
 if __name__ == "__main__":

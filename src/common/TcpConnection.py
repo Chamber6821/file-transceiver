@@ -1,9 +1,5 @@
-from common.Connection import Connection
+from common.Connection import Connection, ConnectionClosed
 from socket import socket
-
-
-class ConnectionClosed(Exception):
-    pass
 
 
 class TcpConnection(Connection):

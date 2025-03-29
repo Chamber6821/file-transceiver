@@ -26,7 +26,7 @@ class AsyncTcpSocket(Socket):
         super().__init__()
         self.ip = ip
         self.port = port
-        self.active_connections: dict[socket.socket, AsyncTcpSocket.ConnectionEntry] = {}
+        self.active_connections: dict[int, AsyncTcpSocket.ConnectionEntry] = {}
 
 
     def connect(self):
@@ -61,21 +61,21 @@ class AsyncTcpSocket(Socket):
                     input=Queue(),
                     output=Queue()
                 )
-                self.active_connections[entry.socket] = entry
+                self.active_connections[entry.socket.fileno()] = entry
 
-                async def sender():
+                async def sender(addr, connection: socket.socket, output: Queue):
                     while not token.canceled():
-                        await asyncio.to_thread(lambda: connection.send(bytes([entry.output.get()])))
+                        await asyncio.to_thread(lambda: connection.send(bytes([output.get()])))
 
-                async def wrap():
+                async def wrap(addr, input, output):
                     try:
                         print('Open connection', addr)
-                        await handler(AsyncConnection(entry.input, entry.output))
+                        await handler(AsyncConnection(input, output))
                     finally:
                         print('Close connection', addr)
 
-                asyncio.run_coroutine_threadsafe(wrap(), worker_loop)
-                asyncio.run_coroutine_threadsafe(sender(), sender_loop)
+                asyncio.run_coroutine_threadsafe(wrap(addr, entry.input, entry.output), worker_loop)
+                asyncio.run_coroutine_threadsafe(sender(addr, connection, entry.output), worker_loop)
         finally:
             token.cancel()
 
@@ -91,7 +91,7 @@ class AsyncTcpSocket(Socket):
             reads: list[socket.socket] = _reads
             if len(reads) == 0: continue
             for read in reads:
-                entry = self.active_connections[read]
+                entry = self.active_connections[read.fileno()]
                 data = read.recv(1024)
                 if len(data) == 0:
                     entry.input.shutdown()

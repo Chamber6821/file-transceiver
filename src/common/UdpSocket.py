@@ -95,7 +95,7 @@ class UdpSocket(Socket):
         last_input_packet: float
 
 
-    def __init__(self, ip: str, port: int, timeout: float) -> None:
+    def __init__(self, ip: str, port: int, timeout: float = 1) -> None:
         super().__init__()
         self.ip = ip
         self.port = port

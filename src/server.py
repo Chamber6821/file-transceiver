@@ -85,7 +85,7 @@ def realFilename(rawFilename: str) -> Union[str, None]:
 
 
 def main():
-    AsyncTcpSocket('0.0.0.0', 8080).listen(handle)
+    UdpSocket('0.0.0.0', 8080).listen(handle)
 
 
 if __name__ == "__main__":

@@ -1,8 +1,8 @@
-from asyncio import Queue
+from queue import Queue
 import asyncio
-from os import access
 from queue import PriorityQueue
 from collections.abc import Awaitable, Callable
+from threading import Thread
 from typing import Any, Dict, List, Tuple
 from common.AsyncConnection import AsyncConnection
 from common.Connection import Connection
@@ -55,13 +55,13 @@ class StreamDriver:
             if packet.number == self.next_input_index:
                 self.next_input_index += 1
                 for byte in packet.data:
-                    await self.input.put(byte)
+                    await asyncio.to_thread(lambda: self.input.put(byte))
                 
 
     async def produce(self) -> List[Packet]:
         async def get_output_part(count: int):
             for _ in range(min([count, self.output.qsize()])):
-                yield await self.output.get()
+                yield await asyncio.to_thread(self.output.get)
         while not self.output.empty():
             data = bytes([x async for x in get_output_part(self.max_data_len)])
             self.unconfirmed_output_packets.append(self.__create_packet(data))
@@ -96,7 +96,7 @@ class UdpSocket(Socket):
         last_input_packet: float
 
 
-    def __init__(self, ip: str, port: int, timeout: float) -> None:
+    def __init__(self, ip: str, port: int, timeout: float = 1) -> None:
         super().__init__()
         self.ip = ip
         self.port = port
@@ -201,15 +201,19 @@ class UdpSocket(Socket):
     def __connect(self, address, handler):
         async def wrap():
             try:
+                print('Run handler for', address)
                 await handler(entry.connection)
             except:
                 print('Drop', address, 'handler')
             finally:
                 entry.driver.shutdown()
+                loop.stop()
 
         entry = self.__create_connection_entry()
         self.connectionMap[address] = entry
-        asyncio.create_task(wrap())
+        loop = asyncio.new_event_loop()
+        Thread(target=loop.run_forever, daemon=True).start()
+        asyncio.run_coroutine_threadsafe(wrap(), loop)
 
 
     def __disconnect(self, address):

@@ -1,12 +1,10 @@
 from dataclasses import dataclass
 from queue import Queue
-import socket, asyncio, traceback, select
-from typing import Any, Awaitable, Callable, Dict, List, Tuple
+import socket, asyncio, select
 from threading import Thread
 
 from common.AsyncConnection import AsyncConnection
-from common.Connection import Connection
-from common.TcpConnection import ConnectionClosed, TcpConnection
+from common.TcpConnection import TcpConnection
 from common.Socket import Socket
 
 
@@ -16,22 +14,19 @@ class CancelationToken:
     def cancel(self): self.__canceled = True
 
 
-
-
 class AsyncTcpSocket(Socket):
     @dataclass
     class ConnectionEntry:
         socket: socket.socket
-        input: Queue
-        output: Queue
+        input: Queue[int]
+        output: Queue[int]
 
 
     def __init__(self, ip, port) -> None:
         super().__init__()
         self.ip = ip
         self.port = port
-        self.active_connections: Dict[socket.socket, AsyncTcpSocket.ConnectionEntry] = {}
-        self.worker_loop = asyncio.new_event_loop()
+        self.active_connections: dict[socket.socket, AsyncTcpSocket.ConnectionEntry] = {}
 
 
     def connect(self):
@@ -49,7 +44,10 @@ class AsyncTcpSocket(Socket):
 
         token = CancelationToken()
         try:
-            Thread(target=self.worker_loop.run_forever, daemon=True).start()
+            worker_loop = asyncio.new_event_loop()
+            sender_loop = asyncio.new_event_loop()
+            Thread(target=worker_loop.run_forever, daemon=True).start()
+            Thread(target=sender_loop.run_forever, daemon=True).start()
             Thread(target=self.__receiver, args=[token], daemon=True).start()
 
             while True:
@@ -67,7 +65,7 @@ class AsyncTcpSocket(Socket):
 
                 async def sender():
                     while not token.canceled():
-                        connection.send(bytes([await entry.output.get()]))
+                        await asyncio.to_thread(lambda: connection.send(bytes([entry.output.get()])))
 
                 async def wrap():
                     try:
@@ -76,8 +74,8 @@ class AsyncTcpSocket(Socket):
                     finally:
                         print('Close connection', addr)
 
-                asyncio.run_coroutine_threadsafe(wrap(), self.worker_loop)
-                asyncio.run_coroutine_threadsafe(sender(), self.worker_loop)
+                asyncio.run_coroutine_threadsafe(wrap(), worker_loop)
+                asyncio.run_coroutine_threadsafe(sender(), sender_loop)
         finally:
             token.cancel()
 

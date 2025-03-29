@@ -200,6 +200,7 @@ class UdpSocket(Socket):
     def __connect(self, address, handler):
         async def wrap():
             try:
+                print('Run handler for', address)
                 await handler(entry.connection)
             except:
                 print('Drop', address, 'handler')

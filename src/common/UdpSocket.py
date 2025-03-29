@@ -2,6 +2,7 @@ from queue import Queue
 import asyncio
 from queue import PriorityQueue
 from collections.abc import Awaitable, Callable
+from threading import Thread
 from typing import Any, Dict, List, Tuple
 from common.AsyncConnection import AsyncConnection
 from common.Connection import Connection
@@ -206,10 +207,13 @@ class UdpSocket(Socket):
                 print('Drop', address, 'handler')
             finally:
                 entry.driver.shutdown()
+                loop.stop()
 
         entry = self.__create_connection_entry()
         self.connectionMap[address] = entry
-        asyncio.create_task(wrap())
+        loop = asyncio.new_event_loop()
+        Thread(target=loop.run_forever, daemon=True).start()
+        asyncio.run_coroutine_threadsafe(wrap(), loop)
 
 
     def __disconnect(self, address):

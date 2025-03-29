@@ -178,10 +178,13 @@ class UdpSocket(Socket):
 
     async def __client_closer(self):
         while True:
-            _, entry = [*self.connectionMap.items()][0]
-            if self.__expired(entry.last_input_packet):
-                entry.driver.shutdown()
-            await asyncio.sleep(self.timeout)
+            try:
+                _, entry = [*self.connectionMap.items()][0]
+                if self.__expired(entry.last_input_packet):
+                    entry.driver.shutdown()
+                await asyncio.sleep(self.timeout)
+            except:
+                pass
 
 
     def __create_connection_entry(self) -> ConnectionEntry:

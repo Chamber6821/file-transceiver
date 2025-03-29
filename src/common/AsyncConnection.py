@@ -1,5 +1,6 @@
+import asyncio
 from common.Connection import Connection, ConnectionClosed
-from asyncio import Queue, QueueEmpty
+from queue import Queue, ShutDown
 
 
 class AsyncConnection(Connection):
@@ -13,8 +14,8 @@ class AsyncConnection(Connection):
         data = bytes()
         while len(data) == 0 or data[-1] != b'\n'[0]:
             try:
-                byte = bytes([await self.input.get()])
-            except QueueEmpty:
+                byte = bytes([await asyncio.to_thread(self.input.get)])
+            except ShutDown:
                 raise ConnectionClosed
             data += byte
         return data.decode()
@@ -23,8 +24,8 @@ class AsyncConnection(Connection):
         data = bytes()
         while len(data) < length:
             try:
-                byte = bytes([await self.input.get()])
-            except QueueEmpty:
+                byte = bytes([await asyncio.to_thread(self.input.get)])
+            except ShutDown:
                 raise ConnectionClosed
             data += byte
         return data
@@ -35,8 +36,8 @@ class AsyncConnection(Connection):
     async def sendBytes(self, bytes):
         for byte in bytes:
             try:
-                await self.output.put(byte)
-            except QueueEmpty:
+                await asyncio.to_thread(lambda: self.output.put(byte))
+            except ShutDown:
                 raise ConnectionClosed
 
 

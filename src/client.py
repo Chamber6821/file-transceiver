@@ -1,3 +1,4 @@
+from common.AsyncTcpSocket import AsyncTcpSocket
 from common.Channel import Channel
 from common.Connection import ConnectionClosed
 import argparse
@@ -166,7 +167,7 @@ async def main():
     parser.add_argument("port", type=int, help="Server port")
     args = parser.parse_args()
     try:
-        connection = UdpSocket(args.ip, args.port, 1).connect()
+        connection = AsyncTcpSocket(args.ip, args.port).connect()
     except Exception as e:
         print(f"Failed to connect to {args.ip}:{args.port}")
         raise e

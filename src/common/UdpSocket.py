@@ -1,6 +1,5 @@
-from asyncio import Queue
+from queue import Queue
 import asyncio
-from os import access
 from queue import PriorityQueue
 from collections.abc import Awaitable, Callable
 from typing import Any, Dict, List, Tuple
@@ -55,13 +54,13 @@ class StreamDriver:
             if packet.number == self.next_input_index:
                 self.next_input_index += 1
                 for byte in packet.data:
-                    await self.input.put(byte)
+                    await asyncio.to_thread(lambda: self.input.put(byte))
                 
 
     async def produce(self) -> List[Packet]:
         async def get_output_part(count: int):
             for _ in range(min([count, self.output.qsize()])):
-                yield await self.output.get()
+                yield await asyncio.to_thread(self.output.get)
         while not self.output.empty():
             data = bytes([x async for x in get_output_part(self.max_data_len)])
             self.unconfirmed_output_packets.append(self.__create_packet(data))

@@ -12,7 +12,7 @@ from time import time
 import socket
 
 
-@dataclass
+@dataclass(order=True)
 class Packet():
     number: int
     accepted: int
@@ -96,7 +96,7 @@ class UdpSocket(Socket):
         last_input_packet: float
 
 
-    def __init__(self, ip: str, port: int, timeout: float = 1) -> None:
+    def __init__(self, ip: str, port: int, timeout: float = 10) -> None:
         super().__init__()
         self.ip = ip
         self.port = port
